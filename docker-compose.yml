@@ -1,0 +1,23 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: moto-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: moto
+      MYSQL_USER: moto
+      MYSQL_PASSWORD: moto
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3306:3306"
+    volumes:
+      - moto-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  moto-mysql-data:
+    driver: local
