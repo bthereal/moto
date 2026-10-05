@@ -6,6 +6,7 @@ use App\Enums\UserRole;
 use App\Enums\VehiclePartStatus;
 use App\Enums\VehicleStatus;
 use App\Models\Part;
+use App\Models\SupplierPart;
 use App\Models\Team;
 use App\Models\User;
 use App\Models\Vehicle;
@@ -81,6 +82,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $this->call(PartSeeder::class);
+        $this->call(SupplierSeeder::class);
 
         $vehicles = new Collection;
 
@@ -119,35 +121,56 @@ class DatabaseSeeder extends Seeder
 
     /**
      * Put a handful of vehicles into testing with parts at different stages
-     * of the required -> in-transit -> delivered -> fitted pipeline, so the
-     * "can this vehicle go back to active?" rule has real examples to show.
+     * of the required -> ordered -> in-transit -> delivered -> fitted
+     * pipeline, so the "can this vehicle go back to active?" rule — and the
+     * ordering workflow itself — have real examples to show.
      */
     private function seedPartRequirements(Collection $vehicles): void
     {
         $parts = Part::inRandomOrder()->get();
 
-        // Blocked: still waiting on parts, several stages away from fitted.
+        // Blocked: one part still needs ordering, one has already been ordered
+        // from a real supplier, one is already in transit.
         $blocked = $vehicles->get(0);
         $blocked->update(['status' => VehicleStatus::Testing]);
-        $blocked->vehicleParts()->createMany([
-            ['part_id' => $parts->get(0)->id, 'status' => VehiclePartStatus::Required],
-            ['part_id' => $parts->get(1)->id, 'status' => VehiclePartStatus::InTransit],
+
+        $blocked->vehicleParts()->create([
+            'part_id' => $parts->get(0)->id,
+            'status' => VehiclePartStatus::Required,
+        ]);
+
+        $toOrder = $blocked->vehicleParts()->create([
+            'part_id' => $parts->get(1)->id,
+            'status' => VehiclePartStatus::Required,
+        ]);
+
+        $stockedListing = SupplierPart::where('part_id', $parts->get(1)->id)
+            ->where('quantity', '>', 0)
+            ->first();
+
+        if ($stockedListing) {
+            $toOrder->placeOrder($stockedListing);
+        }
+
+        $blocked->vehicleParts()->create([
+            'part_id' => $parts->get(2)->id,
+            'status' => VehiclePartStatus::InTransit,
         ]);
 
         // Blocked: closer to ready, but one part has only been delivered, not fitted.
         $almostReady = $vehicles->get(2);
         $almostReady->update(['status' => VehicleStatus::Testing]);
         $almostReady->vehicleParts()->createMany([
-            ['part_id' => $parts->get(2)->id, 'status' => VehiclePartStatus::Fitted],
-            ['part_id' => $parts->get(3)->id, 'status' => VehiclePartStatus::Delivered],
+            ['part_id' => $parts->get(3)->id, 'status' => VehiclePartStatus::Fitted],
+            ['part_id' => $parts->get(4)->id, 'status' => VehiclePartStatus::Delivered],
         ]);
 
         // Ready: every required part has been fitted, so this one is eligible to reactivate.
         $ready = $vehicles->get(4);
         $ready->update(['status' => VehicleStatus::Testing]);
         $ready->vehicleParts()->createMany([
-            ['part_id' => $parts->get(4)->id, 'status' => VehiclePartStatus::Fitted],
             ['part_id' => $parts->get(5)->id, 'status' => VehiclePartStatus::Fitted],
+            ['part_id' => $parts->get(6)->id, 'status' => VehiclePartStatus::Fitted],
         ]);
     }
 }

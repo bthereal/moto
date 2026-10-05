@@ -3,6 +3,7 @@
 use App\Enums\VehiclePartStatus;
 use App\Enums\VehicleStatus;
 use App\Models\Part;
+use App\Models\SupplierPart;
 use App\Models\Vehicle;
 use App\Models\VehiclePart;
 use Livewire\Attributes\Layout;
@@ -17,6 +18,10 @@ new #[Layout('layouts.app')] class extends Component
     public bool $showAddPartForm = false;
 
     public ?int $partId = null;
+
+    public ?int $orderingVehiclePartId = null;
+
+    public ?int $selectedSupplierPartId = null;
 
     public function mount(Vehicle $vehicle): void
     {
@@ -63,10 +68,10 @@ new #[Layout('layouts.app')] class extends Component
         abort_unless($vehiclePart->vehicle_id === $this->vehicle->id, 404);
 
         $next = match ($vehiclePart->status) {
-            VehiclePartStatus::Required => VehiclePartStatus::InTransit,
+            VehiclePartStatus::Ordered => VehiclePartStatus::InTransit,
             VehiclePartStatus::InTransit => VehiclePartStatus::Delivered,
             VehiclePartStatus::Delivered => VehiclePartStatus::Fitted,
-            VehiclePartStatus::Fitted => null,
+            VehiclePartStatus::Required, VehiclePartStatus::Fitted => null,
         };
 
         if ($next !== null) {
@@ -81,15 +86,78 @@ new #[Layout('layouts.app')] class extends Component
         $vehiclePart->delete();
     }
 
+    /**
+     * Open the supplier-selection modal for a required part.
+     */
+    public function openOrderModal(VehiclePart $vehiclePart): void
+    {
+        abort_unless($vehiclePart->vehicle_id === $this->vehicle->id, 404);
+
+        $this->orderingVehiclePartId = $vehiclePart->id;
+        $this->selectedSupplierPartId = null;
+        $this->resetErrorBag('selectedSupplierPartId');
+
+        $this->dispatch('open-modal', 'order-part');
+    }
+
+    public function closeOrderModal(): void
+    {
+        $this->orderingVehiclePartId = null;
+        $this->selectedSupplierPartId = null;
+
+        $this->dispatch('close-modal', 'order-part');
+    }
+
+    /**
+     * Fulfil the requirement from the chosen supplier listing.
+     */
+    public function confirmOrder(): void
+    {
+        $this->validate(['selectedSupplierPartId' => 'required|exists:supplier_parts,id']);
+
+        $vehiclePart = $this->vehicle->vehicleParts()->find($this->orderingVehiclePartId);
+        $supplierPart = SupplierPart::find($this->selectedSupplierPartId);
+
+        if (! $vehiclePart || $vehiclePart->status !== VehiclePartStatus::Required) {
+            $this->addError('selectedSupplierPartId', __('Only a required part can be ordered.'));
+
+            return;
+        }
+
+        if (! $supplierPart || $supplierPart->part_id !== $vehiclePart->part_id || ! $supplierPart->inStock()) {
+            $this->addError('selectedSupplierPartId', __('That listing is no longer available.'));
+
+            return;
+        }
+
+        $vehiclePart->placeOrder($supplierPart);
+
+        $this->closeOrderModal();
+    }
+
     public function with(): array
     {
         $blockActiveOption = $this->vehicle->status === VehicleStatus::Testing && ! $this->vehicle->canActivate();
+
+        $orderingVehiclePart = $this->orderingVehiclePartId
+            ? $this->vehicle->vehicleParts()->with('part')->find($this->orderingVehiclePartId)
+            : null;
+
+        $availableSupplierParts = $orderingVehiclePart
+            ? SupplierPart::where('part_id', $orderingVehiclePart->part_id)
+                ->where('quantity', '>', 0)
+                ->with('supplier')
+                ->orderBy('price')
+                ->get()
+            : collect();
 
         return [
             'statuses' => VehicleStatus::cases(),
             'blockActiveOption' => $blockActiveOption,
             'vehicleParts' => $this->vehicle->vehicleParts()->with('part')->latest()->get(),
             'availableParts' => Part::orderBy('category')->orderBy('name')->get(),
+            'orderingVehiclePart' => $orderingVehiclePart,
+            'availableSupplierParts' => $availableSupplierParts,
         ];
     }
 }; ?>
@@ -185,13 +253,22 @@ new #[Layout('layouts.app')] class extends Component
                                 <span @class([
                                     'text-xs uppercase tracking-wide px-2 py-1 rounded-full',
                                     'bg-amber-100 text-amber-800' => $vehiclePart->status === \App\Enums\VehiclePartStatus::Required,
+                                    'bg-purple-100 text-purple-800' => $vehiclePart->status === \App\Enums\VehiclePartStatus::Ordered,
                                     'bg-blue-100 text-blue-800' => $vehiclePart->status === \App\Enums\VehiclePartStatus::InTransit,
                                     'bg-indigo-100 text-indigo-800' => $vehiclePart->status === \App\Enums\VehiclePartStatus::Delivered,
                                     'bg-green-100 text-green-800' => $vehiclePart->status === \App\Enums\VehiclePartStatus::Fitted,
                                 ])>
                                     {{ $vehiclePart->status->value }}
                                 </span>
-                                @if ($vehiclePart->status !== \App\Enums\VehiclePartStatus::Fitted)
+
+                                @if ($vehiclePart->status === \App\Enums\VehiclePartStatus::Required)
+                                    <button
+                                        wire:click="openOrderModal({{ $vehiclePart->id }})"
+                                        class="text-sm text-indigo-600 hover:text-indigo-800"
+                                    >
+                                        {{ __('Order') }}
+                                    </button>
+                                @elseif ($vehiclePart->status !== \App\Enums\VehiclePartStatus::Fitted)
                                     <button
                                         wire:click="advanceStatus({{ $vehiclePart->id }})"
                                         class="text-sm text-indigo-600 hover:text-indigo-800"
@@ -199,6 +276,7 @@ new #[Layout('layouts.app')] class extends Component
                                         {{ __('Advance') }}
                                     </button>
                                 @endif
+
                                 <button
                                     wire:click="removePart({{ $vehiclePart->id }})"
                                     wire:confirm="{{ __('Remove this part requirement?') }}"
@@ -215,4 +293,47 @@ new #[Layout('layouts.app')] class extends Component
             </div>
         </div>
     </div>
+
+    <x-modal name="order-part" :show="$orderingVehiclePartId !== null" maxWidth="lg">
+        <div class="p-6">
+            <h2 class="text-lg font-medium text-gray-900">
+                {{ __('Order') }} {{ $orderingVehiclePart?->part->name }}
+            </h2>
+            <p class="mt-1 text-sm text-gray-500">{{ __('Choose a supplier to fulfil this requirement.') }}</p>
+
+            <div class="mt-4 space-y-2 max-h-80 overflow-y-auto">
+                @forelse ($availableSupplierParts as $supplierPart)
+                    <label
+                        wire:key="sp-option-{{ $supplierPart->id }}"
+                        @class([
+                            'flex items-center justify-between gap-4 rounded-md border p-3 cursor-pointer',
+                            'border-indigo-500 ring-1 ring-indigo-500' => $selectedSupplierPartId === $supplierPart->id,
+                            'border-gray-200' => $selectedSupplierPartId !== $supplierPart->id,
+                        ])
+                    >
+                        <span class="flex items-center gap-3">
+                            <input type="radio" wire:model="selectedSupplierPartId" value="{{ $supplierPart->id }}" class="text-indigo-600" />
+                            <span>
+                                <span class="block font-medium text-gray-900 text-sm">{{ $supplierPart->supplier->name }}</span>
+                                <span class="block text-xs text-gray-500">{{ $supplierPart->location }} &middot; {{ $supplierPart->quantity }} {{ __('in stock') }}</span>
+                            </span>
+                        </span>
+                        <span class="text-right text-sm">
+                            <span class="block font-medium text-gray-900">&pound;{{ number_format($supplierPart->price, 2) }}</span>
+                            <span class="block text-xs text-gray-500">+&pound;{{ number_format($supplierPart->delivery_cost, 2) }} {{ __('delivery') }}</span>
+                        </span>
+                    </label>
+                @empty
+                    <p class="text-sm text-gray-500">{{ __('No suppliers currently stock this part.') }}</p>
+                @endforelse
+            </div>
+
+            <x-input-error :messages="$errors->get('selectedSupplierPartId')" class="mt-2" />
+
+            <div class="mt-6 flex justify-end gap-3">
+                <x-secondary-button wire:click="closeOrderModal">{{ __('Cancel') }}</x-secondary-button>
+                <x-primary-button wire:click="confirmOrder">{{ __('Confirm order') }}</x-primary-button>
+            </div>
+        </div>
+    </x-modal>
 </div>

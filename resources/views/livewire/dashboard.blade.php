@@ -95,6 +95,7 @@ new #[Layout('layouts.app')] class extends Component
                                                             <span @class([
                                                                 'text-xs uppercase tracking-wide px-2 py-1 rounded-full',
                                                                 'bg-amber-100 text-amber-800' => $vehiclePart->status === \App\Enums\VehiclePartStatus::Required,
+                                                                'bg-purple-100 text-purple-800' => $vehiclePart->status === \App\Enums\VehiclePartStatus::Ordered,
                                                                 'bg-blue-100 text-blue-800' => $vehiclePart->status === \App\Enums\VehiclePartStatus::InTransit,
                                                                 'bg-indigo-100 text-indigo-800' => $vehiclePart->status === \App\Enums\VehiclePartStatus::Delivered,
                                                                 'bg-green-100 text-green-800' => $vehiclePart->status === \App\Enums\VehiclePartStatus::Fitted,

@@ -16,13 +16,20 @@ A demo team-management platform for the Formula 1 industry, built to cross-skill
 - **User** — staff, engineers, drivers, or admins; optionally belongs to a `Team`, and carries a `role` (`App\Enums\UserRole`)
 - **Vehicle** — a car entered by a `Team` for a given season, optionally assigned to a `User` as `driver` (`App\Enums\VehicleStatus`: `active`, `testing`, `retired`)
 - **Part** — a catalog entry for a physical component (`name`, `part_number`, `category` (`App\Enums\PartCategory`), `manufacturer`, `description`)
-- **VehiclePart** — the association between a `Vehicle` and a `Part` it currently requires, carrying its own lifecycle `status` (`App\Enums\VehiclePartStatus`: `required` → `in-transit` → `delivered` → `fitted`)
+- **VehiclePart** — the association between a `Vehicle` and a `Part` it currently requires, carrying its own lifecycle `status` (`App\Enums\VehiclePartStatus`: `required` → `ordered` → `in-transit` → `delivered` → `fitted`)
+- **Supplier** — a parts distributor (`name`, `contact_email`)
+- **SupplierPart** — a supplier's stock listing for a part: `quantity` on hand, `price`, `location`, and `delivery_cost`. A supplier can list any part in the catalog; the same part can be listed by several suppliers at different prices
+- **VehiclePartOrder** — created once, when a `required` `VehiclePart` is fulfilled from a specific `SupplierPart`; snapshots `price`/`delivery_cost` at order time so the order's history doesn't drift if the supplier later changes their price
 
-Relationships: `Team` `hasMany` `User` and `hasMany` `Vehicle`; `Vehicle` `belongsTo` `Team` and optionally `belongsTo` `User` (as `driver`); `Vehicle` `hasMany` `VehiclePart` (also exposed as a `belongsToMany` `Part` through the `VehiclePart` pivot model, via `Vehicle::parts()`).
+Relationships: `Team` `hasMany` `User` and `hasMany` `Vehicle`; `Vehicle` `belongsTo` `Team` and optionally `belongsTo` `User` (as `driver`); `Vehicle` `hasMany` `VehiclePart` (also exposed as a `belongsToMany` `Part` through the `VehiclePart` pivot model, via `Vehicle::parts()`); `Supplier` `hasMany` `SupplierPart`; `VehiclePart` `hasOne` `VehiclePartOrder`, which `belongsTo` a `SupplierPart`.
 
 ### Business rule: parts gate testing → active
 
 A vehicle can only be required to fit a part while its status is `testing` (`App\Http\Requests\StoreVehiclePartRequest` rejects the request otherwise). A `testing` vehicle can only move to `active` once **every** `VehiclePart` it has is `fitted` — `Vehicle::canActivate()` / `Vehicle::hasOutstandingParts()` (`app/Models/Vehicle.php`) are the single source of truth for this, checked from three places: the API (`UpdateVehicleRequest::withValidator()`), the Livewire vehicle page (`vehicles.show`'s `updateStatus()`), and implicitly by the seeder's demo data (one seeded vehicle is deliberately left blocked, one deliberately left ready — see `DatabaseSeeder::seedPartRequirements()`).
+
+### Business rule: ordering a part
+
+A `required` part can't jump straight to `in-transit` — it has to be **ordered from a specific supplier first**. `VehiclePart::placeOrder(SupplierPart $supplierPart)` (`app/Models/VehiclePart.php`) is the single place this happens: inside a DB transaction it snapshots the listing's `price`/`delivery_cost` onto a new `VehiclePartOrder`, decrements the supplier's stock by one, and flips the requirement to `ordered`. It refuses to run unless the requirement is still `required`, the listing is for the *same* part, and the listing actually has stock — each guard throws a `LogicException`, so the method can never be called into producing an inconsistent state, regardless of caller. The generic `PATCH /api/vehicles/{vehicle}/parts/{vehiclePart}` endpoint explicitly rejects `required` and `ordered` as target statuses (`UpdateVehiclePartRequest`) — those two transitions only happen through the dedicated `store`/`order` actions, which is also why the Livewire vehicle page swaps the "Advance" button for an "Order" button (opening a supplier-selection modal) specifically on `required` rows.
 
 ## Getting started
 
@@ -40,7 +47,8 @@ php artisan key:generate
 
 # 4. Migrate and seed demo data: 4 real constructors (Ferrari, McLaren, Williams, Mercedes)
 #    each with a real driver line-up, ~20 staff/drivers, 8 vehicles, a 28-part catalog,
-#    and a few vehicles in testing with parts at different pipeline stages
+#    5 suppliers stocking every part, and a few vehicles in testing with parts at
+#    different pipeline stages (including one already-placed order)
 php artisan migrate --seed
 
 # 5. Build frontend assets
@@ -80,26 +88,42 @@ curl -X POST http://localhost:8000/api/vehicles/1/parts \
   -H "Accept: application/json" -H "Content-Type: application/json" -H "Authorization: Bearer <token>" \
   -d '{"part_id": 4}'
 
-# Advance that requirement through its lifecycle
+# See which suppliers currently have that part in stock
+curl http://localhost:8000/api/vehicles/1/parts/7/suppliers \
+  -H "Accept: application/json" -H "Authorization: Bearer <token>"
+
+# Order it from one of them (snapshots price/delivery cost, decrements stock, moves to "ordered")
+curl -X POST http://localhost:8000/api/vehicles/1/parts/7/order \
+  -H "Accept: application/json" -H "Content-Type: application/json" -H "Authorization: Bearer <token>" \
+  -d '{"supplier_part_id": 12}'
+
+# Advance the rest of the lifecycle by hand
 curl -X PATCH http://localhost:8000/api/vehicles/1/parts/7 \
   -H "Accept: application/json" -H "Content-Type: application/json" -H "Authorization: Bearer <token>" \
   -d '{"status": "fitted"}'
 ```
 
-| Resource     | Endpoints                                                                 |
-|--------------|------------------------------------------------------------------------------|
-| Auth         | `POST /api/tokens` (login), `POST /api/tokens/refresh`, `DELETE /api/tokens/current` (logout), `GET /api/user` (me) |
-| Teams        | `GET/POST /api/teams`, `GET/PUT/PATCH/DELETE /api/teams/{team}`           |
-| Vehicles     | `GET/POST /api/vehicles`, `GET/PUT/PATCH/DELETE /api/vehicles/{vehicle}`  |
-| Users        | `GET/POST /api/users`, `GET/PUT/PATCH/DELETE /api/users/{user}`           |
-| Parts        | `GET/POST /api/parts`, `GET/PUT/PATCH/DELETE /api/parts/{part}` (catalog CRUD) |
-| Vehicle parts| `POST /api/vehicles/{vehicle}/parts` (require, testing-only), `PATCH /api/vehicles/{vehicle}/parts/{vehiclePart}` (advance status), `DELETE /api/vehicles/{vehicle}/parts/{vehiclePart}` (remove) |
+| Resource      | Endpoints                                                                 |
+|---------------|------------------------------------------------------------------------------|
+| Auth          | `POST /api/tokens` (login), `POST /api/tokens/refresh`, `DELETE /api/tokens/current` (logout), `GET /api/user` (me) |
+| Teams         | `GET/POST /api/teams`, `GET/PUT/PATCH/DELETE /api/teams/{team}`           |
+| Vehicles      | `GET/POST /api/vehicles`, `GET/PUT/PATCH/DELETE /api/vehicles/{vehicle}`  |
+| Users         | `GET/POST /api/users`, `GET/PUT/PATCH/DELETE /api/users/{user}`           |
+| Parts         | `GET/POST /api/parts`, `GET/PUT/PATCH/DELETE /api/parts/{part}` (catalog CRUD) |
+| Vehicle parts | `POST /api/vehicles/{vehicle}/parts` (require, testing-only), `PATCH /api/vehicles/{vehicle}/parts/{vehiclePart}` (advance status — `required`/`ordered` excluded), `DELETE /api/vehicles/{vehicle}/parts/{vehiclePart}` (remove) |
+| Ordering      | `GET /api/vehicles/{vehicle}/parts/{vehiclePart}/suppliers` (in-stock listings for the required part), `POST /api/vehicles/{vehicle}/parts/{vehiclePart}/order` (place the order) |
+| Suppliers     | `GET/POST /api/suppliers`, `GET/PUT/PATCH/DELETE /api/suppliers/{supplier}` |
+| Supplier parts| `GET/POST /api/suppliers/{supplier}/parts` (stock list), `PATCH/DELETE /api/suppliers/{supplier}/parts/{supplierPart}` |
 
-Requests are validated by `App\Http\Requests` FormRequest classes and responses are shaped by `App\Http\Resources` JSON resources, which eager-load and nest related `Team`/`User`/`Vehicle`/`Part` data. The web app's login/session auth (Breeze) is entirely separate from this token auth — they share the same `users` table but nothing else.
+Requests are validated by `App\Http\Requests` FormRequest classes and responses are shaped by `App\Http\Resources` JSON resources, which eager-load and nest related `Team`/`User`/`Vehicle`/`Part`/`Supplier` data. The web app's login/session auth (Breeze) is entirely separate from this token auth — they share the same `users` table but nothing else.
 
 ## Frontend
 
-The Livewire/Volt pages (`resources/views/livewire/teams`, `.../vehicles`, `.../parts`) provide browser-based CRUD over the same Eloquent models the API uses — team listing/creation, team detail (staff + vehicle roster), vehicle listing with status filtering, a parts catalog, and a vehicle detail page for updating race status and managing part requirements. The vehicle page enforces the same testing → active rule as the API: the "active" option disappears from the status dropdown (and resubmitting it server-side still gets rejected) until every required part is `fitted`. Auth (login/register/password reset/profile) comes from Breeze's Livewire stack unmodified.
+The Livewire/Volt pages (`resources/views/livewire/teams`, `.../vehicles`, `.../parts`, `.../suppliers`) provide browser-based CRUD over the same Eloquent models the API uses — team listing/creation, team detail (staff + vehicle roster), vehicle listing with status filtering, a parts catalog, a suppliers catalog (each with its own stock list of quantity/price/location/delivery cost), and a vehicle detail page for updating race status and managing part requirements. The vehicle page enforces the same testing → active rule as the API: the "active" option disappears from the status dropdown (and resubmitting it server-side still gets rejected) until every required part is `fitted`.
+
+Clicking "Order" on a `required` part (instead of "Advance", which only appears once a part is past `required`) opens a modal — reusing Breeze's `<x-modal>` component, shown/hidden reactively from a Livewire property rather than a client-side event — listing every supplier currently stocking that part, sorted by price, with quantity/location/delivery cost per option. Confirming a selection calls the same `VehiclePart::placeOrder()` the API uses.
+
+Auth (login/register/password reset/profile) comes from Breeze's Livewire stack unmodified.
 
 ## Testing
 
@@ -107,7 +131,7 @@ The Livewire/Volt pages (`resources/views/livewire/teams`, `.../vehicles`, `.../
 php artisan test
 ```
 
-Feature tests cover both the API (`tests/Feature/Api`) and the Livewire pages (`tests/Feature/*PageTest.php`), including guest-access rejection, validation, and Livewire component interactions via `Livewire\Volt\Volt::test()`. The testing → active business rule is covered at three levels: a model-level unit test (`tests/Unit/VehiclePartsBusinessRuleTest.php`), an API test (`tests/Feature/Api/VehiclePartApiTest.php`), and a Livewire test (in `VehicleManagementPageTest.php`) — deliberately redundant, since the rule is enforced independently in both the API and UI layers and each needs its own proof it's wired up.
+Feature tests cover both the API (`tests/Feature/Api`) and the Livewire pages (`tests/Feature/*PageTest.php`), including guest-access rejection, validation, and Livewire component interactions via `Livewire\Volt\Volt::test()`. Both business rules — testing → active and the parts-ordering workflow — are covered at three levels each (model unit test, API test, Livewire test): `tests/Unit/VehiclePartsBusinessRuleTest.php` / `tests/Unit/VehiclePartOrderingTest.php`, `tests/Feature/Api/VehiclePartApiTest.php` / `VehiclePartOrderApiTest.php`, and `tests/Feature/VehicleManagementPageTest.php` — deliberately redundant, since each rule is enforced independently in both the API and UI layers and each needs its own proof it's wired up.
 
 ## Laravel vs Symfony: how this codebase would differ
 

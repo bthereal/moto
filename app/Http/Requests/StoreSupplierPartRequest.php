@@ -2,12 +2,11 @@
 
 namespace App\Http\Requests;
 
-use App\Enums\VehiclePartStatus;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-class UpdateVehiclePartRequest extends FormRequest
+class StoreSupplierPartRequest extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
@@ -25,13 +24,15 @@ class UpdateVehiclePartRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'status' => [
+            'part_id' => [
                 'required',
-                Rule::enum(VehiclePartStatus::class)->except([
-                    VehiclePartStatus::Required,
-                    VehiclePartStatus::Ordered,
-                ]),
+                'exists:parts,id',
+                Rule::unique('supplier_parts')->where('supplier_id', $this->route('supplier')->id),
             ],
+            'quantity' => ['required', 'integer', 'min:0'],
+            'price' => ['required', 'numeric', 'min:0'],
+            'location' => ['required', 'string', 'max:255'],
+            'delivery_cost' => ['required', 'numeric', 'min:0'],
         ];
     }
 }

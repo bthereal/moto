@@ -38,7 +38,7 @@ class VehicleController extends Controller
      */
     public function show(Vehicle $vehicle): VehicleResource
     {
-        return new VehicleResource($vehicle->load(['team', 'driver', 'vehicleParts.part']));
+        return new VehicleResource($vehicle->load(['team', 'driver', 'vehicleParts.part', 'vehicleParts.order.supplierPart.supplier']));
     }
 
     /**

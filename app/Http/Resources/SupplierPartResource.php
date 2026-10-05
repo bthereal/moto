@@ -5,7 +5,7 @@ namespace App\Http\Resources;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-class VehiclePartResource extends JsonResource
+class SupplierPartResource extends JsonResource
 {
     /**
      * Transform the resource into an array.
@@ -16,10 +16,12 @@ class VehiclePartResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'vehicle_id' => $this->vehicle_id,
-            'status' => $this->status,
+            'quantity' => $this->quantity,
+            'price' => $this->price,
+            'location' => $this->location,
+            'delivery_cost' => $this->delivery_cost,
+            'supplier' => new SupplierResource($this->whenLoaded('supplier')),
             'part' => new PartResource($this->whenLoaded('part')),
-            'order' => new VehiclePartOrderResource($this->whenLoaded('order')),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

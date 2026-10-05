@@ -29,4 +29,12 @@ class Part extends Model
     {
         return $this->hasMany(VehiclePart::class);
     }
+
+    /**
+     * Supplier stock listings for this part.
+     */
+    public function supplierParts(): HasMany
+    {
+        return $this->hasMany(SupplierPart::class);
+    }
 }

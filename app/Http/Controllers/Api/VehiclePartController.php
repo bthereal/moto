@@ -4,12 +4,16 @@ namespace App\Http\Controllers\Api;
 
 use App\Enums\VehiclePartStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\OrderVehiclePartRequest;
 use App\Http\Requests\StoreVehiclePartRequest;
 use App\Http\Requests\UpdateVehiclePartRequest;
+use App\Http\Resources\SupplierPartResource;
 use App\Http\Resources\VehiclePartResource;
+use App\Models\SupplierPart;
 use App\Models\Vehicle;
 use App\Models\VehiclePart;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -50,6 +54,36 @@ class VehiclePartController extends Controller
         $vehiclePart->delete();
 
         return response()->noContent();
+    }
+
+    /**
+     * List supplier listings that currently stock the required part.
+     */
+    public function availableSuppliers(Vehicle $vehicle, VehiclePart $vehiclePart): AnonymousResourceCollection
+    {
+        $this->ensureBelongsToVehicle($vehicle, $vehiclePart);
+
+        return SupplierPartResource::collection(
+            SupplierPart::where('part_id', $vehiclePart->part_id)
+                ->where('quantity', '>', 0)
+                ->with('supplier')
+                ->orderBy('price')
+                ->get()
+        );
+    }
+
+    /**
+     * Fulfil a required part from a chosen supplier listing.
+     */
+    public function order(OrderVehiclePartRequest $request, Vehicle $vehicle, VehiclePart $vehiclePart): VehiclePartResource
+    {
+        $this->ensureBelongsToVehicle($vehicle, $vehiclePart);
+
+        $supplierPart = SupplierPart::findOrFail($request->validated('supplier_part_id'));
+
+        $vehiclePart->placeOrder($supplierPart);
+
+        return new VehiclePartResource($vehiclePart->load(['part', 'order.supplierPart.supplier']));
     }
 
     private function ensureBelongsToVehicle(Vehicle $vehicle, VehiclePart $vehiclePart): void
