@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api;
 
+use App\Enums\UserRole;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -29,7 +30,7 @@ class TeamApiTest extends TestCase
 
     public function test_a_team_can_be_created(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
 
         $payload = [
             'name' => 'Apex Racing',
@@ -50,7 +51,7 @@ class TeamApiTest extends TestCase
 
     public function test_a_team_requires_a_valid_color(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
 
         $this->actingAs($user, 'api')
             ->postJson('/api/teams', [

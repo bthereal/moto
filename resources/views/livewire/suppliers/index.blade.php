@@ -3,6 +3,7 @@
 use App\Models\Supplier;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Validate;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
 
@@ -20,6 +21,8 @@ new #[Layout('layouts.app')] class extends Component
 
     public function createSupplier(): void
     {
+        Gate::authorize('create', Supplier::class);
+
         $this->validate();
 
         Supplier::create([
@@ -32,6 +35,8 @@ new #[Layout('layouts.app')] class extends Component
 
     public function deleteSupplier(Supplier $supplier): void
     {
+        Gate::authorize('delete', $supplier);
+
         $supplier->delete();
     }
 
@@ -49,9 +54,11 @@ new #[Layout('layouts.app')] class extends Component
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
                 <div class="flex items-center justify-between">
                     <h2 class="font-semibold text-xl text-gray-800 leading-tight">{{ __('Suppliers') }}</h2>
+                    @can('create', App\Models\Supplier::class)
                     <x-primary-button wire:click="$toggle('showCreateForm')">
                         {{ __('New supplier') }}
                     </x-primary-button>
+                    @endcan
                 </div>
 
                 @if ($showCreateForm)
@@ -90,6 +97,7 @@ new #[Layout('layouts.app')] class extends Component
                             </div>
                             <div class="flex items-center gap-4 text-sm text-gray-500">
                                 <span>{{ $supplier->supplier_parts_count }} {{ __('parts listed') }}</span>
+                                @can('delete', $supplier)
                                 <button
                                     wire:click="deleteSupplier({{ $supplier->id }})"
                                     wire:confirm="{{ __('Delete this supplier?') }}"
@@ -97,6 +105,7 @@ new #[Layout('layouts.app')] class extends Component
                                 >
                                     {{ __('Delete') }}
                                 </button>
+                                @endcan
                             </div>
                         </div>
                     @endforeach

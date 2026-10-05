@@ -3,6 +3,7 @@
 use App\Models\Team;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Validate;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
 
@@ -32,6 +33,8 @@ new #[Layout('layouts.app')] class extends Component
 
     public function createTeam(): void
     {
+        Gate::authorize('create', Team::class);
+
         $this->validate();
 
         Team::create([
@@ -48,6 +51,8 @@ new #[Layout('layouts.app')] class extends Component
 
     public function deleteTeam(Team $team): void
     {
+        Gate::authorize('delete', $team);
+
         $team->delete();
     }
 
@@ -69,9 +74,11 @@ new #[Layout('layouts.app')] class extends Component
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
                 <div class="flex items-center justify-between">
                     <h3 class="text-lg font-medium text-gray-900">{{ __('All teams') }}</h3>
+                    @can('create', App\Models\Team::class)
                     <x-primary-button wire:click="$toggle('showCreateForm')">
                         {{ __('New team') }}
                     </x-primary-button>
+                    @endcan
                 </div>
 
                 @if ($showCreateForm)
@@ -138,6 +145,7 @@ new #[Layout('layouts.app')] class extends Component
                             <div class="flex items-center gap-4 text-sm text-gray-500">
                                 <span>{{ $team->users_count }} {{ __('staff') }}</span>
                                 <span>{{ $team->vehicles_count }} {{ __('vehicles') }}</span>
+                                @can('delete', $team)
                                 <button
                                     wire:click="deleteTeam({{ $team->id }})"
                                     wire:confirm="{{ __('Delete this team?') }}"
@@ -145,6 +153,7 @@ new #[Layout('layouts.app')] class extends Component
                                 >
                                     {{ __('Delete') }}
                                 </button>
+                                @endcan
                             </div>
                         </div>
                     @endforeach

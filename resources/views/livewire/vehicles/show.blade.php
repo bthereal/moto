@@ -7,6 +7,7 @@ use App\Models\SupplierPart;
 use App\Models\Vehicle;
 use App\Models\VehiclePart;
 use Livewire\Attributes\Layout;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Volt\Component;
 
 new #[Layout('layouts.app')] class extends Component
@@ -31,6 +32,8 @@ new #[Layout('layouts.app')] class extends Component
 
     public function updateStatus(): void
     {
+        Gate::authorize('update', $this->vehicle);
+
         $this->validate(['status' => 'required|string|in:active,testing,retired']);
 
         if ($this->status === VehicleStatus::Active->value
@@ -47,6 +50,8 @@ new #[Layout('layouts.app')] class extends Component
 
     public function requirePart(): void
     {
+        Gate::authorize('create', [VehiclePart::class, $this->vehicle]);
+
         $this->validate(['partId' => 'required|exists:parts,id']);
 
         if ($this->vehicle->status !== VehicleStatus::Testing) {
@@ -65,6 +70,8 @@ new #[Layout('layouts.app')] class extends Component
 
     public function advanceStatus(VehiclePart $vehiclePart): void
     {
+        Gate::authorize('update', $vehiclePart);
+
         abort_unless($vehiclePart->vehicle_id === $this->vehicle->id, 404);
 
         $next = match ($vehiclePart->status) {
@@ -81,6 +88,8 @@ new #[Layout('layouts.app')] class extends Component
 
     public function removePart(VehiclePart $vehiclePart): void
     {
+        Gate::authorize('delete', $vehiclePart);
+
         abort_unless($vehiclePart->vehicle_id === $this->vehicle->id, 404);
 
         $vehiclePart->delete();
@@ -123,6 +132,8 @@ new #[Layout('layouts.app')] class extends Component
 
             return;
         }
+
+        Gate::authorize('order', $vehiclePart);
 
         if (! $supplierPart || $supplierPart->part_id !== $vehiclePart->part_id || ! $supplierPart->inStock()) {
             $this->addError('selectedSupplierPartId', __('That listing is no longer available.'));
@@ -196,6 +207,7 @@ new #[Layout('layouts.app')] class extends Component
 
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
                 <h3 class="text-lg font-medium text-gray-900 mb-4">{{ __('Status') }}</h3>
+                @can('update', $vehicle)
                 <form wire:submit="updateStatus" class="flex items-center gap-3">
                     <select wire:model="status" class="rounded-md border-gray-300 text-sm">
                         @foreach ($statuses as $case)
@@ -209,6 +221,9 @@ new #[Layout('layouts.app')] class extends Component
                         <span class="text-sm text-amber-600">{{ __('Blocked: parts still outstanding.') }}</span>
                     @endif
                 </form>
+                @else
+                    <p class="text-sm text-gray-500">{{ __('Only an admin can change the vehicle status.') }}</p>
+                @endcan
                 <x-input-error :messages="$errors->get('status')" class="mt-2" />
             </div>
 
@@ -216,9 +231,11 @@ new #[Layout('layouts.app')] class extends Component
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="text-lg font-medium text-gray-900">{{ __('Parts') }}</h3>
                     @if ($vehicle->status === \App\Enums\VehicleStatus::Testing)
-                        <x-secondary-button wire:click="$toggle('showAddPartForm')">
-                            {{ __('Require a part') }}
-                        </x-secondary-button>
+                        @can('create', [App\Models\VehiclePart::class, $vehicle])
+                            <x-secondary-button wire:click="$toggle('showAddPartForm')">
+                                {{ __('Require a part') }}
+                            </x-secondary-button>
+                        @endcan
                     @else
                         <span
                             title="{{ __('Move this vehicle to testing to require parts.') }}"
@@ -262,21 +279,26 @@ new #[Layout('layouts.app')] class extends Component
                                 </span>
 
                                 @if ($vehiclePart->status === \App\Enums\VehiclePartStatus::Required)
+                                    @can('order', $vehiclePart)
                                     <button
                                         wire:click="openOrderModal({{ $vehiclePart->id }})"
                                         class="text-sm text-indigo-600 hover:text-indigo-800"
                                     >
                                         {{ __('Order') }}
                                     </button>
+                                    @endcan
                                 @elseif ($vehiclePart->status !== \App\Enums\VehiclePartStatus::Fitted)
+                                    @can('update', $vehiclePart)
                                     <button
                                         wire:click="advanceStatus({{ $vehiclePart->id }})"
                                         class="text-sm text-indigo-600 hover:text-indigo-800"
                                     >
                                         {{ __('Advance') }}
                                     </button>
+                                    @endcan
                                 @endif
 
+                                @can('delete', $vehiclePart)
                                 <button
                                     wire:click="removePart({{ $vehiclePart->id }})"
                                     wire:confirm="{{ __('Remove this part requirement?') }}"
@@ -284,6 +306,7 @@ new #[Layout('layouts.app')] class extends Component
                                 >
                                     {{ __('Remove') }}
                                 </button>
+                                @endcan
                             </div>
                         </div>
                     @empty

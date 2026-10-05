@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api;
 
+use App\Enums\UserRole;
 use App\Enums\VehiclePartStatus;
 use App\Enums\VehicleStatus;
 use App\Models\Part;
@@ -17,7 +18,7 @@ class VehiclePartApiTest extends TestCase
 
     public function test_a_part_cannot_be_required_unless_the_vehicle_is_in_testing(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $vehicle = Vehicle::factory()->create(['status' => VehicleStatus::Active]);
         $part = Part::factory()->create();
 
@@ -30,7 +31,7 @@ class VehiclePartApiTest extends TestCase
 
     public function test_a_part_can_be_required_while_the_vehicle_is_in_testing(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $vehicle = Vehicle::factory()->create(['status' => VehicleStatus::Testing]);
         $part = Part::factory()->create();
 
@@ -49,7 +50,7 @@ class VehiclePartApiTest extends TestCase
 
     public function test_a_part_requirements_status_can_be_advanced(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $vehicle = Vehicle::factory()->create(['status' => VehicleStatus::Testing]);
         $vehiclePart = VehiclePart::factory()->for($vehicle)->status(VehiclePartStatus::Required)->create();
 
@@ -61,7 +62,7 @@ class VehiclePartApiTest extends TestCase
 
     public function test_a_vehicle_cannot_activate_while_parts_are_outstanding(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $vehicle = Vehicle::factory()->create(['status' => VehicleStatus::Testing]);
         VehiclePart::factory()->for($vehicle)->status(VehiclePartStatus::Delivered)->create();
 
@@ -74,7 +75,7 @@ class VehiclePartApiTest extends TestCase
 
     public function test_a_vehicle_can_activate_once_all_parts_are_fitted(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $vehicle = Vehicle::factory()->create(['status' => VehicleStatus::Testing]);
         VehiclePart::factory()->for($vehicle)->status(VehiclePartStatus::Fitted)->create();
 
@@ -86,7 +87,7 @@ class VehiclePartApiTest extends TestCase
 
     public function test_a_part_requirement_can_be_removed(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $vehicle = Vehicle::factory()->create(['status' => VehicleStatus::Testing]);
         $vehiclePart = VehiclePart::factory()->for($vehicle)->create();
 
@@ -99,7 +100,7 @@ class VehiclePartApiTest extends TestCase
 
     public function test_a_part_requirement_from_another_vehicle_is_not_accessible(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $vehicle = Vehicle::factory()->create(['status' => VehicleStatus::Testing]);
         $otherVehicle = Vehicle::factory()->create(['status' => VehicleStatus::Testing]);
         $vehiclePart = VehiclePart::factory()->for($otherVehicle)->create();

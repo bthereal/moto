@@ -15,6 +15,7 @@ use App\Models\VehiclePart;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Gate;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class VehiclePartController extends Controller
@@ -24,6 +25,8 @@ class VehiclePartController extends Controller
      */
     public function store(StoreVehiclePartRequest $request, Vehicle $vehicle): JsonResponse
     {
+        Gate::authorize('create', [VehiclePart::class, $vehicle]);
+
         $vehiclePart = $vehicle->vehicleParts()->create([
             'part_id' => $request->validated('part_id'),
             'status' => VehiclePartStatus::Required,
@@ -38,6 +41,7 @@ class VehiclePartController extends Controller
     public function update(UpdateVehiclePartRequest $request, Vehicle $vehicle, VehiclePart $vehiclePart): VehiclePartResource
     {
         $this->ensureBelongsToVehicle($vehicle, $vehiclePart);
+        Gate::authorize('update', $vehiclePart);
 
         $vehiclePart->update($request->validated());
 
@@ -50,6 +54,7 @@ class VehiclePartController extends Controller
     public function destroy(Vehicle $vehicle, VehiclePart $vehiclePart): Response
     {
         $this->ensureBelongsToVehicle($vehicle, $vehiclePart);
+        Gate::authorize('delete', $vehiclePart);
 
         $vehiclePart->delete();
 
@@ -62,6 +67,7 @@ class VehiclePartController extends Controller
     public function availableSuppliers(Vehicle $vehicle, VehiclePart $vehiclePart): AnonymousResourceCollection
     {
         $this->ensureBelongsToVehicle($vehicle, $vehiclePart);
+        Gate::authorize('view', $vehiclePart);
 
         return SupplierPartResource::collection(
             SupplierPart::where('part_id', $vehiclePart->part_id)
@@ -78,6 +84,7 @@ class VehiclePartController extends Controller
     public function order(OrderVehiclePartRequest $request, Vehicle $vehicle, VehiclePart $vehiclePart): VehiclePartResource
     {
         $this->ensureBelongsToVehicle($vehicle, $vehiclePart);
+        Gate::authorize('order', $vehiclePart);
 
         $supplierPart = SupplierPart::findOrFail($request->validated('supplier_part_id'));
 

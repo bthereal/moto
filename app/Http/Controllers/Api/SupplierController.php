@@ -10,6 +10,7 @@ use App\Models\Supplier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Gate;
 
 class SupplierController extends Controller
 {
@@ -18,6 +19,8 @@ class SupplierController extends Controller
      */
     public function index(): AnonymousResourceCollection
     {
+        Gate::authorize('viewAny', Supplier::class);
+
         return SupplierResource::collection(
             Supplier::withCount('supplierParts')->orderBy('name')->paginate()
         );
@@ -28,6 +31,8 @@ class SupplierController extends Controller
      */
     public function store(StoreSupplierRequest $request): JsonResponse
     {
+        Gate::authorize('create', Supplier::class);
+
         $supplier = Supplier::create($request->validated());
 
         return SupplierResource::make($supplier)->response()->setStatusCode(201);
@@ -38,6 +43,8 @@ class SupplierController extends Controller
      */
     public function show(Supplier $supplier): SupplierResource
     {
+        Gate::authorize('view', $supplier);
+
         return new SupplierResource($supplier->load('supplierParts.part'));
     }
 
@@ -46,6 +53,8 @@ class SupplierController extends Controller
      */
     public function update(UpdateSupplierRequest $request, Supplier $supplier): SupplierResource
     {
+        Gate::authorize('update', $supplier);
+
         $supplier->update($request->validated());
 
         return new SupplierResource($supplier);
@@ -56,6 +65,8 @@ class SupplierController extends Controller
      */
     public function destroy(Supplier $supplier): Response
     {
+        Gate::authorize('delete', $supplier);
+
         $supplier->delete();
 
         return response()->noContent();

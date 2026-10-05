@@ -13,7 +13,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // Apply the 'api' rate limiter (defined in AppServiceProvider) to every
+        // API route. Without this the api group is unthrottled.
+        $middleware->throttleApi();
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Enums\VehicleStatus;
+use App\Models\Vehicle;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -14,7 +15,7 @@ class StoreVehicleRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return true;
+        return $this->user()->can('create', Vehicle::class);
     }
 
     /**

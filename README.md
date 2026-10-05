@@ -1,6 +1,6 @@
 # Moto
 
-A demo team-management platform for the Formula 1 industry, built to cross-skill a Symfony developer into Laravel. It covers the core Laravel stack end-to-end: Eloquent models and migrations, a JWT-protected REST API, and a Livewire/Volt frontend, all backed by MySQL in Docker.
+A demo management platform for the Formula 1 industry, built to in Laravel 13. It covers the core Laravel stack end-to-end: Eloquent models and migrations, a JWT-protected REST API, and a Livewire/Volt frontend, all backed by MySQL in Docker.
 
 ## Stack
 
@@ -58,7 +58,7 @@ npm run build   # or `npm run dev` for hot-reloading during development
 php artisan serve
 ```
 
-The seeder creates a login at **test@example.com / password** (admin, no team assigned).
+The seeder creates a login at **test@example.com / password** (admin, no team assigned). It needs the `admin` role to exercise the app's write paths — see [Authorization](#authorization). These are demo credentials for local use; don't seed them anywhere reachable, and set `APP_DEBUG=false` outside local development.
 
 ## REST API
 
@@ -103,19 +103,58 @@ curl -X PATCH http://localhost:8000/api/vehicles/1/parts/7 \
   -d '{"status": "fitted"}'
 ```
 
-| Resource      | Endpoints                                                                 |
-|---------------|------------------------------------------------------------------------------|
-| Auth          | `POST /api/tokens` (login), `POST /api/tokens/refresh`, `DELETE /api/tokens/current` (logout), `GET /api/user` (me) |
-| Teams         | `GET/POST /api/teams`, `GET/PUT/PATCH/DELETE /api/teams/{team}`           |
-| Vehicles      | `GET/POST /api/vehicles`, `GET/PUT/PATCH/DELETE /api/vehicles/{vehicle}`  |
-| Users         | `GET/POST /api/users`, `GET/PUT/PATCH/DELETE /api/users/{user}`           |
-| Parts         | `GET/POST /api/parts`, `GET/PUT/PATCH/DELETE /api/parts/{part}` (catalog CRUD) |
-| Vehicle parts | `POST /api/vehicles/{vehicle}/parts` (require, testing-only), `PATCH /api/vehicles/{vehicle}/parts/{vehiclePart}` (advance status — `required`/`ordered` excluded), `DELETE /api/vehicles/{vehicle}/parts/{vehiclePart}` (remove) |
-| Ordering      | `GET /api/vehicles/{vehicle}/parts/{vehiclePart}/suppliers` (in-stock listings for the required part), `POST /api/vehicles/{vehicle}/parts/{vehiclePart}/order` (place the order) |
-| Suppliers     | `GET/POST /api/suppliers`, `GET/PUT/PATCH/DELETE /api/suppliers/{supplier}` |
-| Supplier parts| `GET/POST /api/suppliers/{supplier}/parts` (stock list), `PATCH/DELETE /api/suppliers/{supplier}/parts/{supplierPart}` |
+In the table below, **read** endpoints are available to any authenticated user and **write** endpoints are admin-only — see [Authorization](#authorization).
+
+| Resource      | Endpoints                                                                 | Access |
+|---------------|------------------------------------------------------------------------------|--------|
+| Auth          | `POST /api/tokens` (login), `POST /api/tokens/refresh`, `DELETE /api/tokens/current` (logout), `GET /api/user` (me) | public (login/refresh), authenticated (logout/me) |
+| Teams         | `GET /api/teams`, `GET /api/teams/{team}`                                 | authenticated |
+|               | `POST /api/teams`, `PUT/PATCH/DELETE /api/teams/{team}`                   | **admin** |
+| Vehicles      | `GET /api/vehicles`, `GET /api/vehicles/{vehicle}`                        | authenticated |
+|               | `POST /api/vehicles`, `PUT/PATCH/DELETE /api/vehicles/{vehicle}`          | **admin** |
+| Users         | `GET /api/users`, `GET /api/users/{user}`                                 | authenticated |
+|               | `POST /api/users`, `PUT/PATCH/DELETE /api/users/{user}`                   | **admin** |
+| Parts         | `GET /api/parts`, `GET /api/parts/{part}`                                 | authenticated |
+|               | `POST /api/parts`, `PUT/PATCH/DELETE /api/parts/{part}` (catalog CRUD)    | **admin** |
+| Vehicle parts | `POST /api/vehicles/{vehicle}/parts` (require, testing-only), `PATCH /api/vehicles/{vehicle}/parts/{vehiclePart}` (advance status — `required`/`ordered` excluded), `DELETE /api/vehicles/{vehicle}/parts/{vehiclePart}` (remove) | **admin** |
+| Ordering      | `GET /api/vehicles/{vehicle}/parts/{vehiclePart}/suppliers` (in-stock listings for the required part) | authenticated |
+|               | `POST /api/vehicles/{vehicle}/parts/{vehiclePart}/order` (place the order) | **admin** |
+| Suppliers     | `GET /api/suppliers`, `GET /api/suppliers/{supplier}`                     | authenticated |
+|               | `POST /api/suppliers`, `PUT/PATCH/DELETE /api/suppliers/{supplier}`       | **admin** |
+| Supplier parts| `GET /api/suppliers/{supplier}/parts` (stock list)                        | authenticated |
+|               | `POST /api/suppliers/{supplier}/parts`, `PATCH/DELETE /api/suppliers/{supplier}/parts/{supplierPart}` | **admin** |
 
 Requests are validated by `App\Http\Requests` FormRequest classes and responses are shaped by `App\Http\Resources` JSON resources, which eager-load and nest related `Team`/`User`/`Vehicle`/`Part`/`Supplier` data. The web app's login/session auth (Breeze) is entirely separate from this token auth — they share the same `users` table but nothing else.
+
+### Authorization
+
+Authentication only establishes *who* you are; `App\Policies` decides what you may do. The rule is deliberately simple: **any authenticated user can read anything, only `UserRole::Admin` can write anything.** A non-admin attempting a write gets `403`.
+
+That matters most on `/api/users`, which assigns the `role` column — without a policy, any authenticated user could `PATCH` their own role to `admin`, so every role is effectively admin. `role` defaults to `staff` (see the users migration) and self-registration is open, so the unauthorized path would otherwise be: register → get a token → escalate.
+
+Authorization is enforced at two layers, both reading the same policy:
+
+- **`Gate::authorize()` in every controller action.** This is the authoritative check — it covers `index`/`show`/`destroy`, which have no FormRequest.
+- **`authorize()` on each FormRequest.** Redundant for `store`/`update`, but it runs *before* validation, so an unauthorized write returns `403` rather than leaking field-level `422` validation detail.
+
+Abilities follow Laravel's conventions (`viewAny`, `view`, `create`, `update`, `delete`), plus one custom `order` ability on `VehiclePartPolicy` — placing an order commits a purchase and decrements supplier stock, so it is gated separately from a plain status `update`.
+
+Roles live in `App\Enums\UserRole` (`admin`, `principal`, `engineer`, `driver`, `staff`) and `User::isAdmin()` is the single predicate the policies call. Only `admin` is privileged today; the other four are labels with no additional rights, so narrowing a rule means editing one policy method rather than hunting for role checks.
+
+> **Note:** reads are not team-scoped. Any authenticated user can read every team's vehicles, supplier pricing, and the full user roster. That's intentional for a demo, but it is the first thing to change for multi-tenant use.
+
+### Rate limiting
+
+Laravel's `api` middleware group is **not** throttled by default — `Illuminate\Foundation\Configuration\Middleware` only adds `throttle:` when `throttleApi()` is called, which `bootstrap/app.php` now does. Two named limiters are defined in `AppServiceProvider::configureRateLimiting()`:
+
+| Limiter | Applies to | Limit |
+|---------|-----------|-------|
+| `api` | the whole `/api` group | 60/min, keyed per authenticated user (falling back to IP) |
+| `login` | `POST /api/tokens`, `POST /api/tokens/refresh` | 5/min per email+IP, **and** 20/min per IP |
+
+Both limiters must stay defined: a `throttle:<name>` referring to an undefined limiter does not throttle, it falls through to treating the name as a literal attempt count — so an undefined `api` limiter would silently disable throttling rather than fail loudly. `ApiThrottleTest` asserts the limiter is registered for exactly this reason.
+
+The tighter `login` limiter exists because the token endpoints handle credentials and are unauthenticated. The per-email key mirrors the web login throttle in `App\Livewire\Forms\LoginForm`; the per-IP key stops one host spraying many different addresses.
 
 ## Frontend
 
@@ -123,7 +162,9 @@ The Livewire/Volt pages (`resources/views/livewire/teams`, `.../vehicles`, `.../
 
 Clicking "Order" on a `required` part (instead of "Advance", which only appears once a part is past `required`) opens a modal — reusing Breeze's `<x-modal>` component, shown/hidden reactively from a Livewire property rather than a client-side event — listing every supplier currently stocking that part, sorted by price, with quantity/location/delivery cost per option. Confirming a selection calls the same `VehiclePart::placeOrder()` the API uses.
 
-Auth (login/register/password reset/profile) comes from Breeze's Livewire stack unmodified.
+The Livewire pages mutate Eloquent models directly rather than calling the API, so they enforce authorization independently — each write action (`createTeam`, `deleteVehicle`, `updateStatus`, `requirePart`, `advanceStatus`, `removePart`, `confirmOrder`, `addSupplierPart`, …) opens with its own `Gate::authorize()` against the same policies the API uses. The matching controls are wrapped in `@can`, so a non-admin doesn't see buttons that would only return `403`. Hiding a control is presentation, not protection: the server-side check in the action is what actually enforces the rule, and `WebAuthorizationTest` calls the actions directly to prove it.
+
+Auth (login/register/password reset/profile) comes from Breeze's Livewire stack unmodified. Note that registration is open and new accounts get the default `staff` role, which grants read access only.
 
 ## Testing
 
@@ -131,61 +172,12 @@ Auth (login/register/password reset/profile) comes from Breeze's Livewire stack 
 php artisan test
 ```
 
-Feature tests cover both the API (`tests/Feature/Api`) and the Livewire pages (`tests/Feature/*PageTest.php`), including guest-access rejection, validation, and Livewire component interactions via `Livewire\Volt\Volt::test()`. Both business rules — testing → active and the parts-ordering workflow — are covered at three levels each (model unit test, API test, Livewire test): `tests/Unit/VehiclePartsBusinessRuleTest.php` / `tests/Unit/VehiclePartOrderingTest.php`, `tests/Feature/Api/VehiclePartApiTest.php` / `VehiclePartOrderApiTest.php`, and `tests/Feature/VehicleManagementPageTest.php` — deliberately redundant, since each rule is enforced independently in both the API and UI layers and each needs its own proof it's wired up.
+Feature tests cover both the API (`tests/Feature/Api`) and the Livewire pages (`tests/Feature/*PageTest.php`), including guest-access rejection, validation, and Livewire component interactions via `Livewire\Volt\Volt::test()`.
 
-## Laravel vs Symfony: how this codebase would differ
+Authorization and rate limiting have dedicated suites, since a regression in either is silent — the app keeps working, just for the wrong people:
 
-A guide for a Symfony developer reading this codebase, mapping each piece to its closest Symfony equivalent and calling out where the philosophies genuinely diverge.
+- `tests/Feature/Api/ApiAuthorizationTest.php` — asserts each of the four non-admin roles is refused every write, that a non-admin cannot escalate their own `role`, and that reads still succeed
+- `tests/Feature/WebAuthorizationTest.php` — the same, driven through the Livewire actions, plus `@can` control visibility
+- `tests/Feature/Api/ApiThrottleTest.php` — asserts repeated failed logins return `429`, that the throttle is keyed per account, and that the `api` limiter is registered
 
-### Routing
-
-Laravel routes are plain PHP closures/arrays in `routes/web.php` and `routes/api.php`, loaded by `bootstrap/app.php`. `Route::apiResource('teams', TeamController::class)` expands to the seven RESTful routes in one line. Symfony would express the same thing with `#[Route]` attributes directly on controller methods (or YAML/PHP route configs), and there's no built-in "resource controller" convention — you'd hand-write each route or reach for API Platform.
-
-### Models and the ORM
-
-Eloquent (`app/Models/Team.php`) is **Active Record**: the model is both the data structure and the query builder (`Team::where(...)->paginate()`), and relationships are methods that return query builders (`hasMany`, `belongsTo`). Doctrine is a **Data Mapper**: entities are plain PHP objects with no knowledge of persistence, and all querying goes through an `EntityManager`/repository. This is the single biggest mental shift — in Laravel, `$team->vehicles` is live and query-driven; in Symfony, you'd typically inject a `VehicleRepository` and call a method on it.
-
-### Migrations & schema
-
-Both frameworks version schema as PHP-defined migrations, but Laravel's `Schema::create('teams', fn (Blueprint $table) => ...)` is written by hand and run with `php artisan migrate`. Doctrine Migrations are usually *generated* from entity annotations/attributes via `doctrine:migrations:diff`, so the entity is the source of truth rather than the migration file.
-
-### Validation
-
-`App\Http\Requests\StoreTeamRequest` centralizes both authorization (`authorize()`) and validation rules (`rules()`) for one request, resolved automatically by type-hinting it in the controller method. Symfony's Validator works differently: constraints are usually attributes on a DTO or entity (`#[Assert\NotBlank]`), and you validate an object explicitly with `$validator->validate($dto)` — validation isn't tied to "the current HTTP request" the way a FormRequest is.
-
-For business rules that aren't simple per-field constraints — e.g. `UpdateVehicleRequest`'s "can't set status to `active` while parts are outstanding" — Laravel uses a `withValidator()` hook that adds an `after()` closure to inspect the whole request (including the route-bound model) once basic rules pass. The nearest Symfony equivalent is a custom `Constraint`/`ConstraintValidator` pair (or a simpler `Callback` constraint), but those are typically attached to the entity/DTO being validated rather than bolted onto the request class itself.
-
-### API responses
-
-`App\Http\Resources\TeamResource` is a small, explicit `toArray()` transformer with `whenLoaded()` guards to avoid N+1s. It's roughly Laravel's answer to Symfony's Serializer normalizers/groups, but far more manual — there's no attribute-driven serialization config; you write the array shape by hand.
-
-### Authentication: JWT vs LexikJWTAuthenticationBundle
-
-The API is authenticated with **`php-open-source-saver/jwt-auth`**, the closest Laravel equivalent to `lexik/jwt-authentication-bundle`. The mechanics map closely once you see past the config style:
-
-| Concept | This app (jwt-auth) | Symfony (LexikJWTAuthenticationBundle) |
-|---|---|---|
-| Token issuance | `App\Http\Controllers\Api\AuthController::store()` calls `Auth::guard('api')->attempt($credentials)`, which verifies the password and hands back a signed token | Lexik hooks into the Security firewall's `json_login` authenticator — you rarely write the login controller yourself, Lexik's `AuthenticationSuccessHandler` builds the response |
-| Guard wiring | `config/auth.php` gets a new `api` guard with `'driver' => 'jwt'`; routes opt in with `auth:api` middleware | `security.yaml` defines a `firewall` with `stateless: true` and `jwt: ~` — config-first rather than middleware-first |
-| Claims / subject | `User implements JWTSubject`, with `getJWTIdentifier()` (the `sub` claim) and `getJWTCustomClaims()` (this app adds `role`) | Lexik's `payload_enrichment` / `JWTCreatedEvent` — you listen for an event and mutate the payload, rather than implementing an interface on the entity |
-| Signing | HS256 by default (`JWT_SECRET`, HMAC — one shared secret); can be switched to RS256 in `config/jwt.php` | RS256 by default (public/private keypair generated via `lexik:jwt:generate-keypair`) — Lexik nudges you toward asymmetric signing from the start |
-| Refresh | Hand-rolled here: `POST /api/tokens/refresh` calls `Auth::guard('api')->refresh()`, which blacklists the old token's `jti` and mints a new one, using whichever Laravel cache store is configured (`CACHE_STORE=database` here, so it's a deny-list entry in the generic `cache` table — not a purpose-built tokens table) | Not part of Lexik itself — refresh is a separate bundle, `gesdinet/jwt-refresh-token-bundle`, which *does* persist refresh tokens to a dedicated database table |
-| Logout | `Auth::guard('api')->logout()` blacklists the current token the same way | Stateless by design too — "logout" for a pure JWT API is really just the client discarding the token, unless you're using the refresh-token bundle's revocation |
-
-The practical takeaway: Sanctum (what this API used previously) issues *opaque* tokens that are rows in a `personal_access_tokens` table — checking one means a DB lookup every request. A JWT is *self-contained and signed* — checking one normally means verifying a signature with no DB round-trip at all; the only reason this app still touches storage per-request is the blacklist deny-list check (needed to make logout/refresh actually revoke a token, since a bare JWT can't otherwise be un-issued before it expires). That's the same trade-off Lexik faces: pure JWT is stateless and fast, but real revocation always needs *some* server-side state again, which is exactly the gap `gesdinet/jwt-refresh-token-bundle` and this app's blacklist both exist to fill.
-
-### Frontend: Livewire/Volt vs Symfony UX
-
-This is the biggest architectural difference from a typical Symfony setup. Livewire components (here, Volt single-file components in `resources/views/livewire/`) keep component state on the server and re-render over AJAX on every interaction — there's no client-side state management or build step for the component logic itself, just Blade templates with `wire:model`/`wire:click` bindings. Symfony's closest equivalent is **Symfony UX** (Turbo + Stimulus + `LiveComponent`), which follows a similar "server-rendered, sprinkle in interactivity" philosophy — `ux:live-component` is conceptually very close to a Volt component. Without UX, a Symfony app more commonly ships a separate API + full SPA (React/Vue), which this project deliberately avoids in favor of the API existing primarily for external consumers.
-
-### Console & tooling
-
-`php artisan` (route:list, make:model, tinker, migrate) maps to `bin/console` (debug:router, make:entity, doctrine:migrations:migrate). Laravel's `make:*` generators (used throughout this scaffold — `make:model -f`, `make:controller --api`, `make:resource`, `make:request`) are more aggressively "batteries included" than Symfony Maker Bundle, generating fuller boilerplate per command.
-
-### Testing
-
-Feature tests extend `Tests\TestCase` (itself extending `Illuminate\Foundation\Testing\TestCase`), use the `RefreshDatabase` trait to reset an in-memory SQLite database per test, and lean on model factories (`Team::factory()->create()`) for fixtures. Symfony's nearest equivalents are `KernelTestCase`/`WebTestCase` plus a fixture library like Foundry — the factory pattern (`UserFactory::role(...)`) will feel familiar if you've used Foundry's model factories.
-
-### Dependency injection
-
-Both frameworks have a service container, but Laravel leans on it implicitly — type-hint a class in a controller method or FormRequest and it's resolved automatically, no configuration required for the common case. Symfony's container is more explicit: services are typically autowired too, but you'll more often see them configured or tagged in `services.yaml`, and constructor injection into controllers is the norm rather than method-injection.
+Because writes are admin-only, tests that exercise one act as `User::factory()->role(UserRole::Admin)->create()`; tests covering reads deliberately keep the factory default (`staff`) so the read-open rule stays under test. Both business rules — testing → active and the parts-ordering workflow — are covered at three levels each (model unit test, API test, Livewire test): `tests/Unit/VehiclePartsBusinessRuleTest.php` / `tests/Unit/VehiclePartOrderingTest.php`, `tests/Feature/Api/VehiclePartApiTest.php` / `VehiclePartOrderApiTest.php`, and `tests/Feature/VehicleManagementPageTest.php` — deliberately redundant, since each rule is enforced independently in both the API and UI layers and each needs its own proof it's wired up.

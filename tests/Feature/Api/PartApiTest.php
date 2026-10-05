@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api;
 
 use App\Enums\PartCategory;
+use App\Enums\UserRole;
 use App\Models\Part;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -30,7 +31,7 @@ class PartApiTest extends TestCase
 
     public function test_a_part_can_be_created(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
 
         $payload = [
             'name' => 'Front Wing Assembly',
@@ -50,7 +51,7 @@ class PartApiTest extends TestCase
 
     public function test_a_part_number_must_be_unique(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         Part::factory()->create(['part_number' => 'AER-FW-001']);
 
         $this->actingAs($user, 'api')

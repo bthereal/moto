@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\UserRole;
 use App\Models\Part;
 use App\Models\Supplier;
 use App\Models\SupplierPart;
@@ -32,7 +33,7 @@ class SuppliersPageTest extends TestCase
 
     public function test_a_supplier_can_be_created_from_the_index_page(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
 
         Volt::actingAs($user)
             ->test('suppliers.index')
@@ -58,7 +59,7 @@ class SuppliersPageTest extends TestCase
 
     public function test_a_part_can_be_added_to_a_suppliers_list(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $supplier = Supplier::factory()->create();
         $part = Part::factory()->create();
 
@@ -82,7 +83,7 @@ class SuppliersPageTest extends TestCase
 
     public function test_a_supplier_cannot_list_the_same_part_twice(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $supplier = Supplier::factory()->create();
         $part = Part::factory()->create();
         SupplierPart::factory()->for($supplier)->for($part)->create();
@@ -101,7 +102,7 @@ class SuppliersPageTest extends TestCase
 
     public function test_a_listing_can_be_edited(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $supplier = Supplier::factory()->create();
         $supplierPart = SupplierPart::factory()->for($supplier)->create(['quantity' => 3]);
 
@@ -120,7 +121,7 @@ class SuppliersPageTest extends TestCase
 
     public function test_a_listing_can_be_removed(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $supplier = Supplier::factory()->create();
         $supplierPart = SupplierPart::factory()->for($supplier)->create();
 

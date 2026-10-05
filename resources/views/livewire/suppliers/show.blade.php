@@ -4,6 +4,7 @@ use App\Models\Part;
 use App\Models\Supplier;
 use App\Models\SupplierPart;
 use Livewire\Attributes\Layout;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Volt\Component;
 
 new #[Layout('layouts.app')] class extends Component
@@ -31,6 +32,8 @@ new #[Layout('layouts.app')] class extends Component
 
     public function addSupplierPart(): void
     {
+        Gate::authorize('create', [SupplierPart::class, $this->supplier]);
+
         $this->validate([
             'partId' => ['required', 'exists:parts,id', "unique:supplier_parts,part_id,NULL,id,supplier_id,{$this->supplier->id}"],
             'quantity' => ['required', 'integer', 'min:0'],
@@ -63,6 +66,8 @@ new #[Layout('layouts.app')] class extends Component
 
     public function updateSupplierPart(SupplierPart $supplierPart): void
     {
+        Gate::authorize('update', $supplierPart);
+
         abort_unless($supplierPart->supplier_id === $this->supplier->id, 404);
 
         $this->validate([
@@ -89,6 +94,8 @@ new #[Layout('layouts.app')] class extends Component
 
     public function removeSupplierPart(SupplierPart $supplierPart): void
     {
+        Gate::authorize('delete', $supplierPart);
+
         abort_unless($supplierPart->supplier_id === $this->supplier->id, 404);
 
         $supplierPart->delete();
@@ -122,9 +129,11 @@ new #[Layout('layouts.app')] class extends Component
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="text-lg font-medium text-gray-900">{{ __('Parts stocked') }}</h3>
-                    <x-secondary-button wire:click="$toggle('showAddForm')">
-                        {{ __('Add part') }}
-                    </x-secondary-button>
+                    @can('create', [App\Models\SupplierPart::class, $supplier])
+                        <x-secondary-button wire:click="$toggle('showAddForm')">
+                            {{ __('Add part') }}
+                        </x-secondary-button>
+                    @endcan
                 </div>
 
                 @if ($showAddForm)
@@ -214,16 +223,20 @@ new #[Layout('layouts.app')] class extends Component
                                         </p>
                                     </div>
                                     <div class="flex items-center gap-3 text-sm">
-                                        <button wire:click="editSupplierPart({{ $supplierPart->id }})" class="text-indigo-600 hover:text-indigo-800">
-                                            {{ __('Edit') }}
-                                        </button>
-                                        <button
-                                            wire:click="removeSupplierPart({{ $supplierPart->id }})"
-                                            wire:confirm="{{ __('Remove this part from the supplier’s list?') }}"
-                                            class="text-red-600 hover:text-red-800"
-                                        >
-                                            {{ __('Remove') }}
-                                        </button>
+                                        @can('update', $supplierPart)
+                                            <button wire:click="editSupplierPart({{ $supplierPart->id }})" class="text-indigo-600 hover:text-indigo-800">
+                                                {{ __('Edit') }}
+                                            </button>
+                                        @endcan
+                                        @can('delete', $supplierPart)
+                                            <button
+                                                wire:click="removeSupplierPart({{ $supplierPart->id }})"
+                                                wire:confirm="{{ __('Remove this part from the supplier’s list?') }}"
+                                                class="text-red-600 hover:text-red-800"
+                                            >
+                                                {{ __('Remove') }}
+                                            </button>
+                                        @endcan
                                     </div>
                                 </div>
                             @endif

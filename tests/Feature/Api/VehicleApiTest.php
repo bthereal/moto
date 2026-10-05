@@ -29,7 +29,7 @@ class VehicleApiTest extends TestCase
 
     public function test_a_vehicle_requires_a_valid_team(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
 
         $this->actingAs($user, 'api')
             ->postJson('/api/vehicles', [
@@ -44,7 +44,7 @@ class VehicleApiTest extends TestCase
 
     public function test_a_vehicle_can_be_updated(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $vehicle = Vehicle::factory()->create(['status' => 'active']);
 
         $this->actingAs($user, 'api')

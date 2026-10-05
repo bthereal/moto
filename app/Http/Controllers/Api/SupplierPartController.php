@@ -11,6 +11,7 @@ use App\Models\SupplierPart;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Gate;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class SupplierPartController extends Controller
@@ -20,6 +21,8 @@ class SupplierPartController extends Controller
      */
     public function index(Supplier $supplier): AnonymousResourceCollection
     {
+        Gate::authorize('viewAny', [SupplierPart::class, $supplier]);
+
         return SupplierPartResource::collection(
             $supplier->supplierParts()->with('part')->get()
         );
@@ -30,6 +33,8 @@ class SupplierPartController extends Controller
      */
     public function store(StoreSupplierPartRequest $request, Supplier $supplier): JsonResponse
     {
+        Gate::authorize('create', [SupplierPart::class, $supplier]);
+
         $supplierPart = $supplier->supplierParts()->create($request->validated());
 
         return SupplierPartResource::make($supplierPart->load('part'))->response()->setStatusCode(201);
@@ -41,6 +46,7 @@ class SupplierPartController extends Controller
     public function update(UpdateSupplierPartRequest $request, Supplier $supplier, SupplierPart $supplierPart): SupplierPartResource
     {
         $this->ensureBelongsToSupplier($supplier, $supplierPart);
+        Gate::authorize('update', $supplierPart);
 
         $supplierPart->update($request->validated());
 
@@ -53,6 +59,7 @@ class SupplierPartController extends Controller
     public function destroy(Supplier $supplier, SupplierPart $supplierPart): Response
     {
         $this->ensureBelongsToSupplier($supplier, $supplierPart);
+        Gate::authorize('delete', $supplierPart);
 
         $supplierPart->delete();
 

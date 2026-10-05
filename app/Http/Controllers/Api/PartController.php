@@ -10,6 +10,7 @@ use App\Models\Part;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Gate;
 
 class PartController extends Controller
 {
@@ -18,6 +19,8 @@ class PartController extends Controller
      */
     public function index(): AnonymousResourceCollection
     {
+        Gate::authorize('viewAny', Part::class);
+
         return PartResource::collection(
             Part::orderBy('category')->orderBy('name')->paginate()
         );
@@ -28,6 +31,8 @@ class PartController extends Controller
      */
     public function store(StorePartRequest $request): JsonResponse
     {
+        Gate::authorize('create', Part::class);
+
         $part = Part::create($request->validated());
 
         return PartResource::make($part)->response()->setStatusCode(201);
@@ -38,6 +43,8 @@ class PartController extends Controller
      */
     public function show(Part $part): PartResource
     {
+        Gate::authorize('view', $part);
+
         return new PartResource($part);
     }
 
@@ -46,6 +53,8 @@ class PartController extends Controller
      */
     public function update(UpdatePartRequest $request, Part $part): PartResource
     {
+        Gate::authorize('update', $part);
+
         $part->update($request->validated());
 
         return new PartResource($part);
@@ -56,6 +65,8 @@ class PartController extends Controller
      */
     public function destroy(Part $part): Response
     {
+        Gate::authorize('delete', $part);
+
         $part->delete();
 
         return response()->noContent();

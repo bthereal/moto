@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\UserRole;
 use App\Enums\VehiclePartStatus;
 use App\Models\Part;
 use App\Models\SupplierPart;
@@ -34,7 +35,7 @@ class VehicleManagementPageTest extends TestCase
 
     public function test_a_vehicles_status_can_be_updated_from_the_show_page(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $vehicle = Vehicle::factory()->create(['status' => 'active']);
 
         Volt::actingAs($user)
@@ -48,7 +49,7 @@ class VehicleManagementPageTest extends TestCase
 
     public function test_a_vehicle_cannot_be_activated_from_the_show_page_while_parts_are_outstanding(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $vehicle = Vehicle::factory()->create(['status' => 'testing']);
         VehiclePart::factory()->for($vehicle)->status(VehiclePartStatus::Required)->create();
 
@@ -63,7 +64,7 @@ class VehicleManagementPageTest extends TestCase
 
     public function test_a_part_can_be_required_from_the_show_page_while_testing(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $vehicle = Vehicle::factory()->create(['status' => 'testing']);
         $part = Part::factory()->create();
 
@@ -82,7 +83,7 @@ class VehicleManagementPageTest extends TestCase
 
     public function test_a_part_requirement_can_be_advanced_through_its_lifecycle_once_ordered(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $vehicle = Vehicle::factory()->create(['status' => 'testing']);
         $vehiclePart = VehiclePart::factory()->for($vehicle)->status(VehiclePartStatus::Ordered)->create();
 
@@ -100,7 +101,7 @@ class VehicleManagementPageTest extends TestCase
 
     public function test_advancing_a_required_part_directly_is_a_no_op(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $vehicle = Vehicle::factory()->create(['status' => 'testing']);
         $vehiclePart = VehiclePart::factory()->for($vehicle)->status(VehiclePartStatus::Required)->create();
 
@@ -113,7 +114,7 @@ class VehicleManagementPageTest extends TestCase
 
     public function test_ordering_a_required_part_opens_the_modal_with_in_stock_suppliers(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $vehicle = Vehicle::factory()->create(['status' => 'testing']);
         $part = Part::factory()->create();
         $vehiclePart = VehiclePart::factory()->for($vehicle)->for($part)->status(VehiclePartStatus::Required)->create();
@@ -134,7 +135,7 @@ class VehicleManagementPageTest extends TestCase
 
     public function test_confirming_an_order_places_it_and_advances_the_part(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $vehicle = Vehicle::factory()->create(['status' => 'testing']);
         $part = Part::factory()->create();
         $vehiclePart = VehiclePart::factory()->for($vehicle)->for($part)->status(VehiclePartStatus::Required)->create();
@@ -159,7 +160,7 @@ class VehicleManagementPageTest extends TestCase
 
     public function test_confirming_an_order_without_a_selection_fails_validation(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $vehicle = Vehicle::factory()->create(['status' => 'testing']);
         $vehiclePart = VehiclePart::factory()->for($vehicle)->status(VehiclePartStatus::Required)->create();
 
@@ -174,7 +175,7 @@ class VehicleManagementPageTest extends TestCase
 
     public function test_a_vehicle_can_be_activated_from_the_show_page_once_parts_are_fitted(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $vehicle = Vehicle::factory()->create(['status' => 'testing']);
         VehiclePart::factory()->for($vehicle)->status(VehiclePartStatus::Fitted)->create();
 

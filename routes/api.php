@@ -10,8 +10,12 @@ use App\Http\Controllers\Api\VehicleController;
 use App\Http\Controllers\Api\VehiclePartController;
 use Illuminate\Support\Facades\Route;
 
-Route::post('/tokens', [AuthController::class, 'store']);
-Route::post('/tokens/refresh', [AuthController::class, 'refresh']);
+// Unauthenticated credential endpoints — tightly throttled on top of the
+// group-wide 'api' limiter to blunt password brute-forcing.
+Route::middleware('throttle:login')->group(function () {
+    Route::post('/tokens', [AuthController::class, 'store']);
+    Route::post('/tokens/refresh', [AuthController::class, 'refresh']);
+});
 
 Route::middleware('auth:api')->name('api.')->group(function () {
     Route::get('/user', [AuthController::class, 'show']);

@@ -10,6 +10,7 @@ use App\Models\Team;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Gate;
 
 class TeamController extends Controller
 {
@@ -18,6 +19,8 @@ class TeamController extends Controller
      */
     public function index(): AnonymousResourceCollection
     {
+        Gate::authorize('viewAny', Team::class);
+
         return TeamResource::collection(
             Team::withCount(['users', 'vehicles'])->paginate()
         );
@@ -28,6 +31,8 @@ class TeamController extends Controller
      */
     public function store(StoreTeamRequest $request): JsonResponse
     {
+        Gate::authorize('create', Team::class);
+
         $team = Team::create($request->validated());
 
         return TeamResource::make($team)->response()->setStatusCode(201);
@@ -38,6 +43,8 @@ class TeamController extends Controller
      */
     public function show(Team $team): TeamResource
     {
+        Gate::authorize('view', $team);
+
         return new TeamResource($team->load('users', 'vehicles'));
     }
 
@@ -46,6 +53,8 @@ class TeamController extends Controller
      */
     public function update(UpdateTeamRequest $request, Team $team): TeamResource
     {
+        Gate::authorize('update', $team);
+
         $team->update($request->validated());
 
         return new TeamResource($team);
@@ -56,6 +65,8 @@ class TeamController extends Controller
      */
     public function destroy(Team $team): Response
     {
+        Gate::authorize('delete', $team);
+
         $team->delete();
 
         return response()->noContent();

@@ -4,6 +4,7 @@ use App\Enums\PartCategory;
 use App\Models\Part;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Validate;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
 
@@ -30,6 +31,8 @@ new #[Layout('layouts.app')] class extends Component
 
     public function createPart(): void
     {
+        Gate::authorize('create', Part::class);
+
         $this->validate();
 
         Part::create([
@@ -45,6 +48,8 @@ new #[Layout('layouts.app')] class extends Component
 
     public function deletePart(Part $part): void
     {
+        Gate::authorize('delete', $part);
+
         $part->delete();
     }
 
@@ -63,9 +68,11 @@ new #[Layout('layouts.app')] class extends Component
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
                 <div class="flex items-center justify-between">
                     <h2 class="font-semibold text-xl text-gray-800 leading-tight">{{ __('Parts catalog') }}</h2>
+                    @can('create', App\Models\Part::class)
                     <x-primary-button wire:click="$toggle('showCreateForm')">
                         {{ __('New part') }}
                     </x-primary-button>
+                    @endcan
                 </div>
 
                 @if ($showCreateForm)
@@ -127,6 +134,7 @@ new #[Layout('layouts.app')] class extends Component
                                 <span class="text-xs uppercase tracking-wide bg-gray-100 text-gray-700 px-2 py-1 rounded-full">
                                     {{ $part->category->value }}
                                 </span>
+                                @can('delete', $part)
                                 <button
                                     wire:click="deletePart({{ $part->id }})"
                                     wire:confirm="{{ __('Delete this part?') }}"
@@ -134,6 +142,7 @@ new #[Layout('layouts.app')] class extends Component
                                 >
                                     {{ __('Delete') }}
                                 </button>
+                                @endcan
                             </div>
                         </div>
                     @endforeach

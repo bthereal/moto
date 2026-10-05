@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api;
 
+use App\Enums\UserRole;
 use App\Enums\VehiclePartStatus;
 use App\Enums\VehicleStatus;
 use App\Models\SupplierPart;
@@ -34,7 +35,7 @@ class VehiclePartOrderApiTest extends TestCase
 
     public function test_a_required_part_can_be_ordered_from_a_supplier(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $vehicle = Vehicle::factory()->create(['status' => VehicleStatus::Testing]);
         $vehiclePart = VehiclePart::factory()->for($vehicle)->status(VehiclePartStatus::Required)->create();
         $supplierPart = SupplierPart::factory()->for($vehiclePart->part)->inStock(5)->create();
@@ -52,7 +53,7 @@ class VehiclePartOrderApiTest extends TestCase
 
     public function test_ordering_rejects_a_listing_for_the_wrong_part(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $vehicle = Vehicle::factory()->create(['status' => VehicleStatus::Testing]);
         $vehiclePart = VehiclePart::factory()->for($vehicle)->status(VehiclePartStatus::Required)->create();
         $wrongSupplierPart = SupplierPart::factory()->inStock(5)->create();
@@ -66,7 +67,7 @@ class VehiclePartOrderApiTest extends TestCase
 
     public function test_ordering_rejects_an_out_of_stock_listing(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $vehicle = Vehicle::factory()->create(['status' => VehicleStatus::Testing]);
         $vehiclePart = VehiclePart::factory()->for($vehicle)->status(VehiclePartStatus::Required)->create();
         $supplierPart = SupplierPart::factory()->for($vehiclePart->part)->outOfStock()->create();
@@ -80,7 +81,7 @@ class VehiclePartOrderApiTest extends TestCase
 
     public function test_ordering_rejects_a_part_that_is_not_required(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $vehicle = Vehicle::factory()->create(['status' => VehicleStatus::Testing]);
         $vehiclePart = VehiclePart::factory()->for($vehicle)->status(VehiclePartStatus::InTransit)->create();
         $supplierPart = SupplierPart::factory()->for($vehiclePart->part)->inStock(5)->create();
@@ -94,7 +95,7 @@ class VehiclePartOrderApiTest extends TestCase
 
     public function test_the_generic_update_endpoint_rejects_setting_status_to_ordered(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $vehicle = Vehicle::factory()->create();
         $vehiclePart = VehiclePart::factory()->for($vehicle)->status(VehiclePartStatus::Required)->create();
 
@@ -105,7 +106,7 @@ class VehiclePartOrderApiTest extends TestCase
 
     public function test_the_generic_update_endpoint_rejects_setting_status_to_required(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $vehicle = Vehicle::factory()->create();
         $vehiclePart = VehiclePart::factory()->for($vehicle)->status(VehiclePartStatus::Ordered)->create();
 

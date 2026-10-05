@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\PartCategory;
+use App\Enums\UserRole;
 use App\Models\Part;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -31,7 +32,7 @@ class PartsCatalogPageTest extends TestCase
 
     public function test_a_part_can_be_created_from_the_catalog_page(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
 
         Volt::actingAs($user)
             ->test('parts.index')

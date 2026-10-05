@@ -5,6 +5,7 @@ use App\Models\Team;
 use App\Models\Vehicle;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
 
@@ -17,6 +18,8 @@ new #[Layout('layouts.app')] class extends Component
 
     public function deleteVehicle(Vehicle $vehicle): void
     {
+        Gate::authorize('delete', $vehicle);
+
         $vehicle->delete();
     }
 
@@ -78,6 +81,7 @@ new #[Layout('layouts.app')] class extends Component
                                 <td class="py-3 text-gray-500">{{ $vehicle->engine_supplier }}</td>
                                 <td class="py-3 text-gray-500 uppercase text-xs tracking-wide">{{ $vehicle->status->value }}</td>
                                 <td class="py-3 text-right">
+                                    @can('delete', $vehicle)
                                     <button
                                         wire:click="deleteVehicle({{ $vehicle->id }})"
                                         wire:confirm="{{ __('Delete this vehicle?') }}"
@@ -85,6 +89,7 @@ new #[Layout('layouts.app')] class extends Component
                                     >
                                         {{ __('Delete') }}
                                     </button>
+                                    @endcan
                                 </td>
                             </tr>
                         @endforeach

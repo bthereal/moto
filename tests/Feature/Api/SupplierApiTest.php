@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api;
 
+use App\Enums\UserRole;
 use App\Models\Supplier;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -29,7 +30,7 @@ class SupplierApiTest extends TestCase
 
     public function test_a_supplier_can_be_created(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
 
         $this->actingAs($user, 'api')
             ->postJson('/api/suppliers', [
@@ -44,7 +45,7 @@ class SupplierApiTest extends TestCase
 
     public function test_a_supplier_requires_a_valid_email(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
 
         $this->actingAs($user, 'api')
             ->postJson('/api/suppliers', [
@@ -56,7 +57,7 @@ class SupplierApiTest extends TestCase
 
     public function test_a_supplier_can_be_deleted(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->role(UserRole::Admin)->create();
         $supplier = Supplier::factory()->create();
 
         $this->actingAs($user, 'api')

@@ -35,6 +35,15 @@ class User extends Authenticatable implements JWTSubject
     }
 
     /**
+     * Whether this user holds the admin role. Admins are the only role
+     * permitted to make changes through the API.
+     */
+    public function isAdmin(): bool
+    {
+        return $this->role === UserRole::Admin;
+    }
+
+    /**
      * The team this user belongs to (staff, engineers, drivers).
      */
     public function team(): BelongsTo
